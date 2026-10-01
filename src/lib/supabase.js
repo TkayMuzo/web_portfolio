@@ -68,7 +68,6 @@ export async function fetchPublishedProjects() {
     return { data: portfolioData.projects, source: 'fallback' };
   }
 }
-
 /**
  * Fetch a single project by slug or ID with fallback
  */
@@ -171,6 +170,7 @@ export async function fetchPublishedBooks() {
     purchase_url: portfolioData.writing.book.links?.buyUrl || '',
     sample_url: portfolioData.writing.book.links?.sampleUrl || '',
     status: 'published',
+    featured: true,
   };
 
   if (!isSupabaseConfigured()) {
@@ -182,6 +182,7 @@ export async function fetchPublishedBooks() {
       .from('books')
       .select('*')
       .eq('status', 'published')
+      .order('featured', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (error || !data || data.length === 0) {

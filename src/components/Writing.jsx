@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { portfolioData } from '../data/portfolio.js';
 import { fetchPublishedArticles, fetchPublishedBooks } from '../lib/supabase.js';
+import { Link } from '../router.jsx';
 
 export default function Writing() {
   const { writing, brand } = portfolioData;
@@ -27,33 +28,52 @@ export default function Writing() {
   // CMS book records are flat, while the static portfolio book includes cover
   // presentation data. Merge them for this view so either source is safe.
   const fallbackBook = writing.book || {};
+
+  const safeHighlights = Array.isArray(book?.highlights) && book.highlights.length > 0
+    ? book.highlights
+    : Array.isArray(book?.keyHighlights) && book.keyHighlights.length > 0
+      ? book.keyHighlights
+      : (fallbackBook.keyHighlights || fallbackBook.highlights || []);
+
+  const purchaseUrl = (
+    book?.purchase_url !== undefined && book?.purchase_url !== null
+      ? String(book.purchase_url)
+      : (book?.links?.buyUrl || fallbackBook.links?.buyUrl || '')
+  ).trim();
+
+  const sampleUrl = (
+    book?.sample_url !== undefined && book?.sample_url !== null
+      ? String(book.sample_url)
+      : (book?.links?.sampleUrl || fallbackBook.links?.sampleUrl || '')
+  ).trim();
+
   const safeBook = {
     ...fallbackBook,
     ...(book || {}),
+    title: book?.title || fallbackBook.title || '',
+    description: book?.description || fallbackBook.description || '',
+    author: book?.author || fallbackBook.author || fallbackBook.cover?.author || 'Takudzwa Muzovaka',
+    slug: book?.slug || fallbackBook.slug || 'the-zimbabwean-india-dream',
+    cover_image: book?.cover_image || fallbackBook.cover_image || '',
+    badge: book?.badge || (book?.featured === false ? 'Published book' : (fallbackBook.badge || 'Featured book')),
+    purchase_url: purchaseUrl,
+    sample_url: sampleUrl,
     cover: {
       ...(fallbackBook.cover || {}),
       ...(book?.cover || {}),
-      author: book?.author || book?.cover?.author || fallbackBook.cover?.author || '',
+      title: book?.title || fallbackBook.cover?.title || fallbackBook.title || '',
+      subtitle: book?.subtitle || fallbackBook.cover?.subtitle || '',
+      author: book?.author || book?.cover?.author || fallbackBook.cover?.author || fallbackBook.author || 'Takudzwa Muzovaka',
     },
-    keyHighlights: Array.isArray(book?.keyHighlights)
-      ? book.keyHighlights
-      : Array.isArray(book?.highlights)
-        ? book.highlights
-        : (fallbackBook.keyHighlights || []),
+    keyHighlights: safeHighlights,
+    highlights: safeHighlights,
   };
+
   const safeArticles = Array.isArray(articleList)
     ? articleList.filter((article) => article && typeof article.title === 'string')
     : [];
-  const bookSlug = safeBook.slug || 'the-zimbabwean-india-dream';
-  const purchaseUrl = safeBook.purchase_url || safeBook.links?.buyUrl || '';
-  const sampleUrl = safeBook.sample_url || safeBook.links?.sampleUrl || '';
 
-  // Only show book action links that exist
-  const bookLinks = [
-    purchaseUrl && { label: 'Buy Now', href: purchaseUrl, primary: true, external: true },
-    sampleUrl && { label: 'Read Sample', href: sampleUrl, primary: false, external: true },
-    { label: 'Book Details →', href: `/books/${bookSlug}`, primary: false, external: false },
-  ].filter(Boolean);
+  const bookSlug = safeBook.slug || 'the-zimbabwean-india-dream';
 
   return (
     <section
@@ -103,36 +123,111 @@ export default function Writing() {
                 aspectRatio: '2/3',
                 backgroundColor: 'var(--color-navy)',
                 borderRadius: '8px 14px 14px 8px',
-                padding: '1.25rem 1rem',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                color: 'var(--color-white)',
-                textAlign: 'center',
                 position: 'relative',
                 boxShadow: '-6px 10px 25px rgba(5,11,22,0.4), inset 4px 0 8px rgba(255,255,255,0.08)',
                 border: '1px solid rgba(201,150,62,0.4)',
                 transform: 'perspective(600px) rotateY(-8deg)',
                 flexShrink: 0,
                 margin: '0 auto',
+                overflow: 'hidden',
               }}
             >
-              {/* Spine line */}
-              <div style={{ position: 'absolute', left: '8px', top: 0, bottom: 0, width: '2px', background: 'rgba(201,150,62,0.2)', borderRadius: '2px' }} aria-hidden="true" />
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <img src={brand.logoPath} alt={brand.name} style={{ width: '32px', height: 'auto', opacity: 0.9 }} />
-              </div>
-              <div>
-                <h4 className="font-serif" style={{ fontSize: '0.88rem', color: 'var(--color-gold-bright)', lineHeight: 1.25, marginBottom: '0.35rem', fontWeight: 700 }}>
-                  {(safeBook.cover.title || safeBook.title || '').toUpperCase()}
-                </h4>
-                <div style={{ fontSize: '0.52rem', color: 'var(--color-gold-light)', letterSpacing: '0.1em' }}>
-                  {safeBook.cover.subtitle}
+              {safeBook.cover_image ? (
+                <>
+                  <img
+                    src={safeBook.cover_image}
+                    alt={safeBook.title ? `${safeBook.title} cover` : 'Book cover'}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                  {/* Spine line overlay */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '8px',
+                      top: 0,
+                      bottom: 0,
+                      width: '2px',
+                      background: 'rgba(201,150,62,0.3)',
+                      borderRadius: '2px',
+                      pointerEvents: 'none',
+                    }}
+                    aria-hidden="true"
+                  />
+                </>
+              ) : (
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    padding: '1.25rem 1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    color: 'var(--color-white)',
+                    textAlign: 'center',
+                    position: 'relative',
+                  }}
+                >
+                  {/* Spine line */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '8px',
+                      top: 0,
+                      bottom: 0,
+                      width: '2px',
+                      background: 'rgba(201,150,62,0.2)',
+                      borderRadius: '2px',
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <img
+                      src={brand.logoPath}
+                      alt={brand.name}
+                      style={{ width: '32px', height: 'auto', opacity: 0.9 }}
+                    />
+                  </div>
+                  <div>
+                    <h4
+                      className="font-serif"
+                      style={{
+                        fontSize: '0.88rem',
+                        color: 'var(--color-gold-bright)',
+                        lineHeight: 1.25,
+                        marginBottom: '0.35rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {(safeBook.cover?.title || safeBook.title || '').toUpperCase()}
+                    </h4>
+                    <div
+                      style={{
+                        fontSize: '0.52rem',
+                        color: 'var(--color-gold-light)',
+                        letterSpacing: '0.1em',
+                      }}
+                    >
+                      {safeBook.cover?.subtitle}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.58rem',
+                      color: 'var(--color-text-light-muted)',
+                      letterSpacing: '0.08em',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {safeBook.cover?.author || safeBook.author}
+                  </div>
                 </div>
-              </div>
-              <div style={{ fontSize: '0.58rem', color: 'var(--color-text-light-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>
-                {safeBook.cover.author}
-              </div>
+              )}
             </div>
 
             {/* Book info */}
@@ -169,32 +264,52 @@ export default function Writing() {
                 ))}
               </ul>
 
-              {/* CTA buttons — only rendered when actual URLs exist */}
-              {bookLinks.length > 0 ? (
-                <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-                  {bookLinks.map((link) => (
-                    <a
-                      key={link.label}
-                      href={link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={link.primary ? 'btn btn-primary' : 'btn btn-secondary'}
-                      style={{ padding: '0.55rem 1.25rem', fontSize: '0.85rem' }}
-                    >
-                      {link.label}
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                /* Fallback when no book URLs are configured */
-                <a
-                  href="#contact"
-                  className="btn btn-primary"
-                  style={{ padding: '0.55rem 1.5rem', fontSize: '0.85rem' }}
+              {/* CTA buttons */}
+              <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {purchaseUrl ? (
+                  <a
+                    href={purchaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary"
+                    style={{ padding: '0.55rem 1.25rem', fontSize: '0.85rem' }}
+                  >
+                    Buy Now
+                  </a>
+                ) : null}
+
+                {sampleUrl ? (
+                  <a
+                    href={sampleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-dark"
+                    style={{
+                      padding: '0.55rem 1.25rem',
+                      fontSize: '0.85rem',
+                      backgroundColor: 'var(--color-navy)',
+                      color: 'var(--color-white)',
+                      border: '1px solid var(--color-navy)',
+                    }}
+                  >
+                    Read Sample
+                  </a>
+                ) : null}
+
+                <Link
+                  to={`/books/${bookSlug}`}
+                  className="btn btn-dark"
+                  style={{
+                    padding: '0.55rem 1.25rem',
+                    fontSize: '0.85rem',
+                    backgroundColor: 'var(--color-navy)',
+                    color: 'var(--color-white)',
+                    border: '1px solid var(--color-navy)',
+                  }}
                 >
-                  Get in Touch →
-                </a>
-              )}
+                  Book Details →
+                </Link>
+              </div>
             </div>
           </div>
 

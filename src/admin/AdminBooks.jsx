@@ -17,6 +17,12 @@ const initialBookState = {
   featured: false,
 };
 
+const asText = (value) => (value == null ? '' : String(value));
+const optionalText = (value) => {
+  const trimmed = asText(value).trim();
+  return trimmed || null;
+};
+
 export default function AdminBooks() {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,8 +75,18 @@ export default function AdminBooks() {
   const handleOpenEditor = (b = null) => {
     if (b) {
       setEditingBook({
+        ...initialBookState,
         ...b,
-        highlights: Array.isArray(b.highlights) ? b.highlights.join('\n') : (b.highlights || ''),
+        title: asText(b.title),
+        slug: asText(b.slug),
+        author: asText(b.author) || 'Takudzwa Muzovaka',
+        description: asText(b.description),
+        purchase_url: asText(b.purchase_url),
+        sample_url: asText(b.sample_url),
+        cover_image: asText(b.cover_image),
+        status: b.status === 'published' ? 'published' : 'draft',
+        featured: Boolean(b.featured),
+        highlights: Array.isArray(b.highlights) ? b.highlights.join('\n') : asText(b.highlights),
       });
     } else {
       setEditingBook({ ...initialBookState });
@@ -81,27 +97,42 @@ export default function AdminBooks() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!editingBook.title.trim()) {
+    if (saving || uploadingImage) return;
+
+    if (!asText(editingBook.title).trim()) {
       setNotification({ type: 'error', message: 'Book title is required.' });
       return;
     }
 
-    const slug = editingBook.slug.trim() || editingBook.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const slug = asText(editingBook.slug).trim()
+      || asText(editingBook.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-    const highlightsArray = editingBook.highlights
-      ? editingBook.highlights.split('\n').map((h) => h.trim()).filter(Boolean)
-      : [];
+    const highlightsArray = asText(editingBook.highlights)
+      .split('\n')
+      .map((h) => h.trim())
+      .filter(Boolean);
+
+    const purchaseUrl = optionalText(editingBook.purchase_url);
+    const sampleUrl = optionalText(editingBook.sample_url);
+    const invalidLink = [purchaseUrl, sampleUrl].find((url) => url && !/^https?:\/\//i.test(url));
+    if (invalidLink) {
+      setNotification({
+        type: 'error',
+        message: 'Purchase and sample links must start with http:// or https://, or be left empty.',
+      });
+      return;
+    }
 
     const payload = {
-      title: editingBook.title.trim(),
+      title: asText(editingBook.title).trim(),
       slug,
-      author: editingBook.author.trim() || 'Takudzwa Muzovaka',
-      description: editingBook.description.trim() || null,
+      author: asText(editingBook.author).trim() || 'Takudzwa Muzovaka',
+      description: optionalText(editingBook.description),
       highlights: highlightsArray,
-      purchase_url: editingBook.purchase_url.trim() || null,
-      sample_url: editingBook.sample_url.trim() || null,
-      cover_image: editingBook.cover_image.trim() || null,
-      status: editingBook.status,
+      purchase_url: purchaseUrl,
+      sample_url: sampleUrl,
+      cover_image: optionalText(editingBook.cover_image),
+      status: editingBook.status === 'published' ? 'published' : 'draft',
       featured: Boolean(editingBook.featured),
     };
 
@@ -118,7 +149,7 @@ export default function AdminBooks() {
 
     setSaving(true);
     try {
-      if (editingBook.id && editingBook.created_at) {
+      if (editingBook.id) {
         const { error } = await supabase.from('books').update(payload).eq('id', editingBook.id);
         if (error) throw error;
         setNotification({ type: 'success', message: 'Book updated successfully.' });
@@ -128,9 +159,12 @@ export default function AdminBooks() {
         setNotification({ type: 'success', message: 'Book added successfully.' });
       }
       setIsEditorOpen(false);
-      loadBooks();
+      await loadBooks();
     } catch (err) {
-      setNotification({ type: 'error', message: 'Save error: ' + err.message });
+      setNotification({
+        type: 'error',
+        message: 'Save error: ' + (err?.message || 'Could not save this book. Please try again.'),
+      });
     } finally {
       setSaving(false);
     }
@@ -380,7 +414,19 @@ export default function AdminBooks() {
                 </button>
               </div>
 
-              <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <form onSubmit={handleSave} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {notification.message && (
+                  <div style={{
+                    padding: '0.85rem 1rem',
+                    borderRadius: '10px',
+                    fontSize: '0.9rem',
+                    backgroundColor: notification.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                    border: `1px solid ${notification.type === 'error' ? '#F87171' : '#34D399'}`,
+                    color: notification.type === 'error' ? '#FCA5A5' : '#6EE7B7',
+                  }}>
+                    {notification.message}
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
                   <div style={{ gridColumn: 'span 2' }}>
                     <label style={labelStyle}>Book Title *</label>
@@ -442,7 +488,7 @@ export default function AdminBooks() {
                     <label style={labelStyle}>Purchase URL (Leave empty if not yet available)</label>
                     <input
                       type="url"
-                      value={editingBook.purchase_url}
+                      value={asText(editingBook.purchase_url)}
                       onChange={(e) => setEditingBook({ ...editingBook, purchase_url: e.target.value })}
                       placeholder="https://amazon.com/... or gumroad.com/..."
                       style={inputStyle}
@@ -452,7 +498,7 @@ export default function AdminBooks() {
                     <label style={labelStyle}>Sample / Preview URL</label>
                     <input
                       type="url"
-                      value={editingBook.sample_url}
+                      value={asText(editingBook.sample_url)}
                       onChange={(e) => setEditingBook({ ...editingBook, sample_url: e.target.value })}
                       placeholder="https://..."
                       style={inputStyle}
@@ -465,7 +511,7 @@ export default function AdminBooks() {
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <input
                       type="text"
-                      value={editingBook.cover_image}
+                      value={asText(editingBook.cover_image)}
                       onChange={(e) => setEditingBook({ ...editingBook, cover_image: e.target.value })}
                       placeholder="Cover image URL or upload file"
                       style={{ ...inputStyle, flex: 1 }}
@@ -536,9 +582,9 @@ export default function AdminBooks() {
                   </button>
                   <button
                     type="submit"
-                    disabled={saving}
+                    disabled={saving || uploadingImage}
                     className="btn btn-primary"
-                    style={{ padding: '0.75rem 2rem' }}
+                    style={{ padding: '0.75rem 2rem', opacity: saving || uploadingImage ? 0.7 : 1, cursor: saving || uploadingImage ? 'wait' : 'pointer' }}
                   >
                     {saving ? 'Saving Book…' : 'Save Book'}
                   </button>
